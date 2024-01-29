@@ -3,6 +3,7 @@
 still need to refactor code o-o
 
 notes (for Kemp)
+
 **Endgame insights** - seems hard
 
 Maybe:
