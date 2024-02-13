@@ -1,8 +1,9 @@
 # lichess-games-analysis
 
-still need to refactor code o-o
+A project for learning some processes in data science and building data visualisations to provide insight!
+The lichess dataset was selected because I like chess. 
 
-notes (for Kemp)
+Notes (for Kemp)
 
 **Endgame insights** - seems hard
 
