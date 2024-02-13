@@ -3,7 +3,8 @@
 A project for learning some processes in data science and building data visualisations to provide insight!
 The lichess dataset was selected because I like chess. 
 
-Notes (for Kemp)
+
+Notes on some themes that can/probably cannot be explored:
 
 **Endgame insights** - seems hard
 
