@@ -73,7 +73,7 @@ def plot_bar_chart(df, x_column, y_column, color_column, labels, title, color_ma
         y=y_column, 
         color=color_column, 
         labels=labels, 
-        title=f"{title} <br><sup>(from 20,000 Lichess Games)</sup>", 
+        title=title, 
         template="plotly_white", 
         color_discrete_map=color_map, 
         orientation=orientation,
@@ -188,17 +188,36 @@ def plot_by_time(df):
     )
     return fig
 
-def plot_first_move_count(df):
+def get_selected_ratings(min_rating, max_rating):
     """
+    Get list of selected ratings by the selected rating range.
     """
-    first_move_df = df.groupby('first_move').size().reset_index(name='count')
+    min_rating_index = rating_categories.index(min_rating)
+    max_rating_index = rating_categories.index(max_rating) 
+
+    selected_ratings = rating_categories[min_rating_index:max_rating_index + 1] # Include of the selected max rating
+
+    return selected_ratings
+
+def plot_first_move_count(df, num, min_rating, max_rating):
+    """
+    Returns a plotly histogram of the top {num} first moves played in
+    the selected range of rated games.
+    """
+    selected_ratings = get_selected_ratings(min_rating, max_rating)
+    filtered_df = df[df['avg_rating_category'].isin(selected_ratings)]
+    num_games = len(filtered_df.index)
+
+    # Count by first move
+    first_move_df = filtered_df.groupby('first_move').size().reset_index(name='count')
+    first_move_df = first_move_df[first_move_df['count'] > 0]
 
     # Sort the DataFrame by 'count' column in descending order and reset row index
     first_move_df = first_move_df.sort_values(by='count', ascending=False)
     first_move_df = first_move_df.reset_index(drop=True)
 
-    # Get the top 10 openings played
-    first_move_df = first_move_df.head(10)
+    # Get the top # openings played
+    first_move_df = first_move_df.head(num)
 
     fig = plot_bar_chart(
         df=first_move_df, 
@@ -206,19 +225,33 @@ def plot_first_move_count(df):
         y_column='count',
         color_column=None, 
         labels={"first_move": "First move", "count": "Number of times played"},
-        title="Most Common First Moves", 
+        title=f"Top {num} First Moves Played in {min_rating} to {max_rating} Rated Games \
+            <br><sup>(from {num_games} Lichess Games)</sup>", 
         color_map=None, orientation=None, barmode=None
     )
     return fig
 
-def plot_by_first_move(df):
-    # Grouping by first move and result, then counting occurrences
-    result_df = df.groupby(['first_move', 'result']).size().reset_index(name='count')
+def plot_by_first_move(df, num, min_rating, max_rating):
+    selected_ratings = get_selected_ratings(min_rating, max_rating)
+    filtered_df = df[df['avg_rating_category'].isin(selected_ratings)]
+    num_games = len(filtered_df.index)
 
-    result_pivot = pd.pivot_table(result_df, values='count', index='first_move', columns='result')
+    # Grouping by first move and result, then counting occurrences
+    result_df = filtered_df.groupby(['first_move', 'result']).size().reset_index(name='count')
+    result_df = result_df[result_df['count'] > 0]
+
+    result_pivot = pd.pivot_table(
+        result_df, 
+        values='count', 
+        index='first_move', 
+        columns='result', 
+        fill_value=0
+    )
+    # Add a column for total count of games per first move
+    result_pivot['Total Count'] = result_pivot.sum(axis=1)
+    # Sort by descending count of total games
+    result_pivot.sort_values(by='Total Count', ascending=False, inplace=True)
     result_pivot.reset_index(inplace=True)
-    result_pivot.sort_values(by='first_move', ascending=False, inplace=True)
-    result_pivot.fillna(0, inplace=True)
 
     melted_df = pd.melt(
         result_pivot,
@@ -227,15 +260,14 @@ def plot_by_first_move(df):
         var_name='result',
         value_name='count'
     )
-    melted_df['Percentage'] = round(100 * melted_df['count'] / melted_df.groupby('first_move')['count'].transform('sum'), 2)
-
+    melted_df['percentage'] = round(100 * melted_df['count'] / melted_df.groupby('first_move')['count'].transform('sum'), 2)
     # Sorting by 'result' as 'White won' and then by 'Percentage' in descending order
-    melted_df.sort_values(by=['result', 'Percentage'], ascending=[False, False], inplace=True)
+    melted_df.sort_values(by=['result', 'count'], ascending=[False, True], inplace=True)
 
     # Creating and showing the bar plot for game results vs first move
     fig = plot_bar_chart(
         df=melted_df, 
-        x_column="Percentage",
+        x_column="percentage",
         y_column="first_move",
         color_column='result', 
         labels={"first_move": "First Move", "Percentage": "Proportion of Wins (%)", "result": "Game Result"}, 
@@ -245,7 +277,7 @@ def plot_by_first_move(df):
     )
     return fig
 
-def plot_top_openings(df, num,):
+def plot_top_openings(df, num, min_rating, max_rating):
     openings_df = df.groupby('opening_name').size().reset_index(name='count')
 
     # Sort the DataFrame by 'count' column in descending order and reset row index
@@ -279,11 +311,17 @@ df = clean_and_process_df(df)
 # by_time_chart = plot_by_time(df)
 # st.plotly_chart(by_time_chart)
 
-first_move_histogram = plot_first_move_count(df)
+# Get min/max rating categories to filter by
+min_rating, max_rating = st.select_slider(
+    "Select a range of average rating of games",
+    options=rating_categories,
+    value=(rating_categories[0], rating_categories[-1]))
+
+MIN_NUM_RESULTS, MAX_NUM_RESULTS = 1, 30
+num_results = st.slider("Number of results to display", MIN_NUM_RESULTS, MAX_NUM_RESULTS, 10)
+
+first_move_histogram = plot_first_move_count(df, num_results, min_rating, max_rating)
 st.plotly_chart(first_move_histogram)
 
-# TODO user adjust first move chart by player rating, by number of times played
-by_first_move_chart = plot_by_first_move(df)
+by_first_move_chart = plot_by_first_move(df, num_results, min_rating, max_rating)
 st.plotly_chart(by_first_move_chart)
-
-df
